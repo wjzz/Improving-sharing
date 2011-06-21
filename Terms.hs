@@ -1,5 +1,6 @@
 module Terms where
 
+import Data.Maybe
 import Test.QuickCheck
 
 data Name = X | Y
@@ -13,6 +14,23 @@ subst (B n)       v s = B n
 subst (F x)       v s = if x == v then s else F x
 subst (Abs t)     v s = Abs (subst t v s)
 subst (App t1 t2) v s = App (subst t1 v s) (subst t2 v s)
+
+substM :: Term -> Name -> Term -> Term
+substM t v s = fromMaybe t (iter t) where
+  
+  iter :: Term -> Maybe Term
+  iter (B _)    = Nothing
+  iter (F x)
+    | x == v    = Just s
+    | otherwise = Nothing
+                  
+  iter (Abs t0)    = Abs `fmap` (iter t0)
+  iter (App t1 t2) = 
+    case (iter t1, iter t2) of
+      (Nothing , Nothing) -> Nothing
+      (m1 , m2)           -> Just $ App (fromMaybe t1 m1) (fromMaybe t2 m2)
+
+
 
 substS :: Term -> Name -> Term -> Term
 substS t v s = iter t id (\() -> t) where
@@ -34,6 +52,9 @@ substS t v s = iter t id (\() -> t) where
 
 testT :: Term -> Name -> Term -> Bool
 testT t v s = subst t v s == substS t v s
+
+testT2 :: Term -> Name -> Term -> Bool
+testT2 t v s = subst t v s == substM t v s
 
 instance Arbitrary Name where
   arbitrary = elements [X , Y]
