@@ -29,7 +29,8 @@ fun substFree_naive t v s =
         iter t
 end
 
-val ex1 = App (Abs (F "x"), App (F "y" , B 0))
+val ex1 = App (Abs (F "x"), Abs (App (F "y" , B 0)))
+val ex2 = Abs (F "y")
 
 (* We notice, that the presence of a binary constructor introduces a new
    possibility: i.e. the left subterm may have to be shared, while the right
@@ -113,21 +114,126 @@ fun substFree_exception t v s =
                          else 
                              raise NoChange
           | iter (Abs t0)       = Abs (iter t0)
-          | iter (App (t1, t2)) = s
-            (* Wrong: App (iter t1, iter t2) *)
-            
+          | iter (App (t1, t2)) = 
+              (* 1: *)  
+                     (* App (iter t1, iter t2) *)
+              (* 2: *)
+                     (* App (iter t1 handle NoChange => t1,
+                             iter t2 handle NoChange => t2) *)
+            (let 
+                val s1 = iter t1 
+            in 
+                (* there was a change, we have to rebuild *)
+                App (s1, iter t2 handle NoChange => t2)
+            end) 
+            (* rebuild only iff iter t2 is rebuilt *)
+            handle NoChange => App (t1, iter t2) 
     in
         iter t handle NoChange => t
     end
 
-(* In the 'Wrong:' comment we see a problem. If traversing only one subterms
-   raises an exception we return to the top, even though we should have rebuild
-   one branch! Imitating the pattern matching seems inevitable.
+(* We first consider a few failed approaches:
+
+   1) we don't handle any exceptions in the app case. 
+     this leads to a wrong result when exactly one subterm changes, because
+     we signal that nothing has changed at all. 
+
+   2) when we handle each case separately we obtain a function that is correct
+      wrt. to the result value, but it doesn't meet our objection of achieving
+      maximal sharing. It's not that bad, though. We miss the sharing opportunity
+      only in the case when neither of branches has changed.
+*)
+
+(* The correct version:
+   we bind the result of the substitution in the left branch.
+   If there is a change there, no uncaught exception is raised.
+   We know that we need to allocate the App no matter what happens in the
+   right subtree, so we just do it while using the handle construct to pick
+   iter t2 or t2, whichever proves to be correct.
+   If iter t1 raises the NoChange exception we get into the outer handler.
+   Now is iter t2 finished with no exceptions the right subtree has changed,
+   and allocation of App is justified, while if the exception IS thrown, then
+   it will propagate and App won't be allocated.
+
+*)
+
+(* Please notice, that 
+     fromMaybe t1 (iter t1) 
+   and 
+     iter t1 handle NoChange => t1
+   are intentionally identical here!
 *)
 
 
+(* Time for CPS! *)
 
-val all_functions = [ substFree_naive , substFree_option_monad ,
-                      substFree_exception ]
+fun substFree_cps t v s = 
+    let 
+        fun iter (B _) same = (fn changedK => same ())
+          | iter (F x) same = (fn changedK =>
+                                  if x = v then
+                                      changedK s
+                                  else
+                                      same ())
+
+          | iter (Abs t0) same = (fn changedK => 
+                                     iter t0 same 
+                                             (fn t0' => changedK (Abs t0')))
+
+          | iter (App (t1, t2)) same = 
+            (fn changedK => 
+                iter t1 (fn ()  => iter t2 same
+                                           (fn t2' => changedK (App (t1 , t2'))))
+                        (fn t1' => iter t2 (fn ()  => changedK (App (t1', t2)))
+                                           (fn t2' => changedK (App (t1', t2')))))
+    in
+        iter t (fn () => t) (fn x => x)
+    end
+
+(* The cps version uses two continuations same and changedK.
+   changedK is invoked when the term has changed, while same is
+   used for singnaling that nothing has changed. Because same is a 
+   function of type unit -> Term, we can also view it as a delayed computation
+   that will yield a Term.
+
+   In the App case we have to stack the continuation in such a way, that
+   changedK is called when at least one subterm has changed.
+
+   Open question: can we write this function cleanly using only one continuation?
+*)
+
+(* Can we implement this function using shift/reset? shift0/reset0? shift2/reset2? *)
+
+;
+use "shift.sml" ;
+structure TermCtrl = Shift_and_Reset (type answer = term) ;
+
+fun substFree_shift_reset tt v s = 
+    let open TermCtrl in
+        let
+            fun iter t =
+                case t of
+                    B n => shift (fn k => t)
+                  | F x => if x = v then
+                               s
+                           else
+                               shift (fn k => t)
+                  | Abs t0       => Abs (iter t0)
+                  | App (t1, t2) => 
+                      App (reset (fn () => iter t1), reset (fn () => iter t2))
+        in
+            reset (fn () => iter tt)
+        end
+    end
+
+
+
+
+val all_functions = [ substFree_naive 
+                    , substFree_option_monad
+                    , substFree_exception 
+                    , substFree_cps 
+                    , substFree_shift_reset
+                    ]
 
 fun test_all t v s = List.map (fn f => f t v s) all_functions

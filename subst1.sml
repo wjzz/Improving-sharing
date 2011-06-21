@@ -100,7 +100,7 @@ fun substForA_cps t s =
     let
         fun iter A      = (fn changedK => changedK s)
           | iter B      = (fn changedK => t)
-          | iter (T t0) = (fn changedK => iter t0 (fn t' => changedK (T t')))
+          | iter (T t0) = (fn changedK => iter t0 (fn t0' => changedK (T t0')))
     in
         iter t (fn x => x)
     end ;
