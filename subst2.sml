@@ -211,18 +211,19 @@ structure TermCtrl = Shift_and_Reset (type answer = term) ;
 fun substFree_shift_reset tt v s = 
     let open TermCtrl in
         let
-            fun iter t =
+            fun iter t same =
                 case t of
-                    B n => shift (fn k => t)
+                    B n => 
                   | F x => if x = v then
-                               s
+                               
                            else
-                               shift (fn k => t)
-                  | Abs t0       => Abs (iter t0)
+                               
+                  | Abs t0       => 
                   | App (t1, t2) => 
-                      App (reset (fn () => iter t1), reset (fn () => iter t2))
+                      
+                      
         in
-            reset (fn () => iter tt)
+            reset (fn () => iter tt (fun () => tt))
         end
     end
 

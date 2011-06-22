@@ -123,6 +123,21 @@ fun substForA_shift_reset t s =
         end
     end
 
+fun substForA_shift_reset2 t s =
+    let 
+        open TermCtrl 
+    in
+        let
+            fun iter A      = s
+              | iter B      = shift (fn k => t) (* abort *)
+              | iter (T t0) = shift (fn k => reset (fn () => k (T (iter t0))))
+                            (* this seems equal to T (iter t0) *)
+        in
+            reset (fn () => iter t)
+        end
+    end
+
+
 (* We observe that this version is identical in shape with the expression version,
   with abort beign raise and reset being handle! *)
 
