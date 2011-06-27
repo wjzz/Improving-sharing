@@ -15,6 +15,7 @@ data Expr = V Var                -- variable
           | C Int                -- constant
           | Expr :+: Expr        -- sum of expressions
             deriving Eq          -- only for testing!
+
 infixl :+:
 
 eval :: Expr -> (Var -> Int) -> Int                                
@@ -31,17 +32,6 @@ instance Show Expr where
   show (C c)       = show c
   show (e1 :+: e2) = printf "(%s + %s)" (show e1) (show e2)
   
-instance Arbitrary Expr where
-  arbitrary = do
-    n <- choose (0,2) :: Gen Int
-    case n of
-      0 -> 
-        V <$> elements ['a', 'b']
-      1 -> 
-        C <$> elements [0, 1]
-      2 ->
-        (:+:) <$> arbitrary <*> arbitrary
-
 -------------------------------------
 --  Simplification of expressions  --
 -------------------------------------
@@ -63,16 +53,27 @@ simplifyM :: Expr -> Maybe Expr
 simplifyM (V _)       = Nothing
 simplifyM (C _)       = Nothing
 simplifyM (e1 :+: e2) = 
+  (case (s1, s2) of
+    (Nothing, Nothing) -> simplPlusM e1 e2
+    (_ , _ )           -> simplPlusM e1' e2' `mplus` Just (e1' :+: e2')) where
+    
+      s1 = simplifyM e1
+      s2 = simplifyM e2
+      
+      e1' = fromMaybe e1 s1
+      e2' = fromMaybe e2 s2
+    
+{- a more verbose rewrite of the :+: case, closer to the cps version 
+
   case (simplifyM e1, simplifyM e2) of
     (Nothing  , Nothing)  -> simplPlusM e1  e2  `mplus` Nothing
     (Just e1' , Nothing)  -> simplPlusM e1' e2  `mplus` Just (e1' :+: e2)
     (Nothing  , Just e2') -> simplPlusM e1  e2' `mplus` Just (e1  :+: e2') 
     (Just e1' , Just e2') -> simplPlusM e1' e2' `mplus` Just (e1' :+: e2')
-  
-  --simplPlusM (fromMaybe e1 (simplifyM e1)) (fromMaybe e2 (simplifyM e2))
+-}
 
 -- given two fully simplified operands of :+: tries to simplify
--- the whole expression. If no 
+-- the whole expression. 
 simplPlusM :: Expr -> Expr -> Maybe Expr
 simplPlusM (C 0) e     = Just e
 simplPlusM e     (C 0) = Just e
@@ -84,7 +85,7 @@ simplPlusM _      _    = Nothing
 simplify2 :: Expr -> Expr
 simplify2 e = simplifyCPS e id (const e)
 
--- usually, a = Expr
+-- usually a = Expr
 simplifyCPS :: Expr -> (Expr -> a) -> (() -> a) -> a
 simplifyCPS e changed same =
     case e of
@@ -112,6 +113,26 @@ r = (V 'c' :+: (C 0 :+: C 0))
 simplifyMe :: Expr
 simplifyMe = (C 0 :+: V 'c') :+: (C 10 :+: C 32) :+: (V 'c' :+: (C 0 :+: C 0))
 
+
+----------------------------------------------
+-- Only tests below - can be safely ignored --
+----------------------------------------------
+
+------------------------------------
+--  An instance for quickCheck.   --
+------------------------------------
+
+instance Arbitrary Expr where
+  arbitrary = do
+    n <- choose (0,2) :: Gen Int
+    case n of
+      0 -> 
+        V <$> elements ['a', 'b']
+      1 -> 
+        C <$> elements [0, 1]
+      2 ->
+        (:+:) <$> arbitrary <*> arbitrary
+
 ------------------
 --  Properties  --
 ------------------
@@ -121,3 +142,10 @@ simplEval e = eval e (const 1) == eval (simplify e) (const 1)
 
 simplEquiv :: Expr -> Bool
 simplEquiv e = simplify e == simplify2 e
+
+-----------------
+--  Run tests  --
+-----------------
+
+runTests :: IO ()
+runTests = quickCheck simplEquiv

@@ -13,10 +13,10 @@ datatype term = B of int
 (* Again we will look at the substitution operation. We will be substituting a given
   term s for all occurences of the given name v in the given term t.
 
-  Also again, in all version but the naive one, we will want to avoid rebuilding the
+  Also again, in all versions but the naive one, we will want to avoid rebuilding the
   input term and (this is a new aspect in comparison with the previous file) we will
   strive for as much sharing with the input structure as possible (using the same 
-  techniques.
+  techniques).
 *)
 
 fun substFree_naive t v s = 
@@ -32,7 +32,7 @@ end
 val ex1 = App (Abs (F "x"), Abs (App (F "y" , B 0)))
 val ex2 = Abs (F "y")
 
-(* We notice, that the presence of a binary constructor introduces a new
+(* We notice that the presence of a binary constructor introduces a new
    possibility: i.e. the left subterm may have to be shared, while the right
    one will change.
    The only situation, in which the whole App (t1, t2) term will be shared is when
@@ -204,6 +204,7 @@ fun substFree_cps t v s =
 
 (* Can we implement this function using shift/reset? shift0/reset0? shift2/reset2? *)
 
+(*
 ;
 use "shift.sml" ;
 structure TermCtrl = Shift_and_Reset (type answer = term) ;
@@ -227,14 +228,13 @@ fun substFree_shift_reset tt v s =
         end
     end
 
-
+*)
 
 
 val all_functions = [ substFree_naive 
                     , substFree_option_monad
                     , substFree_exception 
                     , substFree_cps 
-                    , substFree_shift_reset
                     ]
 
 fun test_all t v s = List.map (fn f => f t v s) all_functions

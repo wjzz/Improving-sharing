@@ -3,7 +3,9 @@ Control.Print.printDepth := 100;
 (* We begin with a trivial example. We will experiment with more and more 
    compicated examples in other files. *)
 
-datatype Term = A | B | T of Term
+datatype Term = A 
+              | B 
+              | T of Term
 
 (* We will deal will substituting a given term for the A leaf. *)
 
@@ -53,11 +55,13 @@ fun substForA_exceptions t s =
    The trick is to keep track of any changes explictly by using the Maybe monad. 
    We can use a dedicated datatype:
       data ChangeTracking a = Old | New a (or Same | Changed a)
-   or just use the Maybe (Option) type.
+   or just use the Maybe/Option type.
 
    If we return Old we are stating that we don't need (so we don't want) to
-   alter the given Term. If we return New t we state that the subterm has changed                       and the whole path from the top needs to be rebuild (since we are in the immutable world).        
-                                                                                                        This approach is much heavier than the exception way, but it will scale better when we'll
+   alter the given Term. If we return New t we state that the subterm has changed 
+   and the whole path from the top needs to be rebuild (since we are in the immutable world). 
+
+   This approach is much heavier than the exception way, but it will scale better when we'll
    start analyzing more complicated terms (i.e. with branches/application node) and 
    functions on them.
 *)
@@ -105,6 +109,7 @@ fun substForA_cps t s =
         iter t (fn x => x)
     end ;
 
+
 (* We can go back to direct style using delimited continuations *)
 
 use "shift.sml" ;
@@ -122,21 +127,6 @@ fun substForA_shift_reset t s =
             reset (fn () => iter t)
         end
     end
-
-fun substForA_shift_reset2 t s =
-    let 
-        open TermCtrl 
-    in
-        let
-            fun iter A      = s
-              | iter B      = shift (fn k => t) (* abort *)
-              | iter (T t0) = shift (fn k => reset (fn () => k (T (iter t0))))
-                            (* this seems equal to T (iter t0) *)
-        in
-            reset (fn () => iter t)
-        end
-    end
-
 
 (* We observe that this version is identical in shape with the expression version,
   with abort beign raise and reset being handle! *)
